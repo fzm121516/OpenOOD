@@ -21,85 +21,82 @@ from .preprocessor import get_default_preprocessor
 
 class Evaluator:
     def __init__(
-        self,
-        net: nn.Module,
-        id_name: str,
-        data_root: str = './data',
-        config_root: str = './configs',
-        preprocessor: Callable = None,
-        postprocessor_name: str = None,
-        postprocessor: Type[BasePostprocessor] = None,
-        batch_size: int = 200,
-        shuffle: bool = False,
-        num_workers: int = 4,
+            self,
+            net: nn.Module,
+            id_name: str,
+            data_root: str = './data',
+            config_root: str = './configs',
+            preprocessor: Callable = None,
+            postprocessor_name: str = None,
+            postprocessor: Type[BasePostprocessor] = None,
+            batch_size: int = 200,
+            shuffle: bool = False,
+            num_workers: int = 4,
     ) -> None:
-        """A unified, easy-to-use API for evaluating (most) discriminative OOD
-        detection methods.
+        """用于评估大多数判别式 OOD 检测方法的统一易用 API。
 
         Args:
             net (nn.Module):
-                The base classifier.
+                基础分类器。
             id_name (str):
-                The name of the in-distribution dataset.
+                归属数据集的名称。
             data_root (str, optional):
-                The path of the data folder. Defaults to './data'.
+                数据文件夹的路径。默认为 './data'。
             config_root (str, optional):
-                The path of the config folder. Defaults to './configs'.
+                配置文件夹的路径。默认为 './configs'。
             preprocessor (Callable, optional):
-                The preprocessor of input images.
-                Passing None will use the default preprocessor
-                following convention. Defaults to None.
+                输入图像的预处理器。
+                如果传入 None，将使用默认预处理器。
+                默认为 None。
             postprocessor_name (str, optional):
-                The name of the postprocessor that obtains OOD score.
-                Ignored if an actual postprocessor is passed.
-                Defaults to None.
+                用于获取 OOD 分数的后处理器名称。
+                如果传入实际的后处理器则忽略。
+                默认为 None。
             postprocessor (Type[BasePostprocessor], optional):
-                An actual postprocessor instance which inherits
-                OpenOOD's BasePostprocessor. Defaults to None.
+                继承自 OpenOOD 的 BasePostprocessor 的实际后处理器实例。默认为 None。
             batch_size (int, optional):
-                The batch size of samples. Defaults to 200.
+                样本的批量大小。默认为 200。
             shuffle (bool, optional):
-                Whether shuffling samples. Defaults to False.
+                是否打乱样本。默认为 False。
             num_workers (int, optional):
-                The num_workers argument that will be passed to
-                data loaders. Defaults to 4.
+                传递给数据加载器的 num_workers 参数。默认为 4。
 
         Raises:
             ValueError:
-                If both postprocessor_name and postprocessor are None.
+                如果 postprocessor_name 和 postprocessor 都为 None。
             ValueError:
-                If the specified ID dataset {id_name} is not supported.
+                如果指定的 ID 数据集 {id_name} 不受支持。
             TypeError:
-                If the passed postprocessor does not inherit BasePostprocessor.
+                如果传递的后处理器不继承自 BasePostprocessor。
         """
-        # check the arguments
+        # 检查参数
         if postprocessor_name is None and postprocessor is None:
-            raise ValueError('Please pass postprocessor_name or postprocessor')
+            raise ValueError('请传入 postprocessor_name 或 postprocessor')
         if postprocessor_name is not None and postprocessor is not None:
             print(
-                'Postprocessor_name is ignored because postprocessor is passed'
+                '因为传入了 postprocessor，所以 postprocessor_name 被忽略'
             )
         if id_name not in DATA_INFO:
-            raise ValueError(f'Dataset [{id_name}] is not supported')
+            raise ValueError(f'数据集 [{id_name}] 不受支持')
 
-        # get data preprocessor
+        # 获取数据预处理器
         if preprocessor is None:
             preprocessor = get_default_preprocessor(id_name)
 
-        # set up config root
+        # 设置配置文件夹路径
         if config_root is None:
             filepath = os.path.dirname(os.path.abspath(__file__))
             config_root = os.path.join(*filepath.split('/')[:-2], 'configs')
 
-        # get postprocessor
+        # 获取后处理器
         if postprocessor is None:
             postprocessor = get_postprocessor(config_root, postprocessor_name,
                                               id_name)
         if not isinstance(postprocessor, BasePostprocessor):
             raise TypeError(
-                'postprocessor should inherit BasePostprocessor in OpenOOD')
+                'postprocessor 应该继承自 OpenOOD 的 BasePostprocessor')
 
-        # load data
+        # 加载数据
         data_setup(data_root, id_name)
         loader_kwargs = {
             'batch_size': batch_size,
@@ -109,7 +106,7 @@ class Evaluator:
         dataloader_dict = get_id_ood_dataloader(id_name, data_root,
                                                 preprocessor, **loader_kwargs)
 
-        # wrap base model to work with certain postprocessors
+        # 包装基础模型以适应特定的后处理器
         if postprocessor_name == 'react':
             net = ReactNet(net)
         elif postprocessor_name == 'ash':
@@ -117,7 +114,7 @@ class Evaluator:
         elif postprocessor_name == 'scale':
             net = ScaleNet(net)
 
-        # postprocessor setup
+        # 后处理器设置
         postprocessor.setup(net, dataloader_dict['id'], dataloader_dict['ood'])
 
         self.id_name = id_name
@@ -142,8 +139,8 @@ class Evaluator:
             'ood': {
                 'val': None,
                 'near':
-                {k: None
-                 for k in dataloader_dict['ood']['near'].keys()},
+                    {k: None
+                     for k in dataloader_dict['ood']['near'].keys()},
                 'far': {k: None
                         for k in dataloader_dict['ood']['far'].keys()},
             },
@@ -154,20 +151,33 @@ class Evaluator:
             'csid_labels': {k: None
                             for k in dataloader_dict['csid'].keys()},
         }
-        # perform hyperparameter search if have not done so
+        # 如果还未进行超参数搜索，则执行
         if (self.postprocessor.APS_mode
                 and not self.postprocessor.hyperparam_search_done):
             self.hyperparam_search()
 
         self.net.eval()
 
-        # how to ensure the postprocessors can work with
-        # models whose definition doesn't align with OpenOOD
-
     def _classifier_inference(self,
                               data_loader: DataLoader,
                               msg: str = 'Acc Eval',
                               progress: bool = True):
+        """对数据加载器进行分类器推断。
+
+        Args:
+            data_loader (DataLoader):
+                用于推断的数据加载器。
+            msg (str, optional):
+                进度条的描述信息。默认为 'Acc Eval'。
+            progress (bool, optional):
+                是否显示进度条。默认为 True。
+
+        Returns:
+            all_preds (torch.Tensor):
+                所有预测结果。
+            all_labels (torch.Tensor):
+                所有标签。
+        """
         self.net.eval()
 
         all_preds = []
@@ -185,6 +195,16 @@ class Evaluator:
         return all_preds, all_labels
 
     def eval_acc(self, data_name: str = 'id') -> float:
+        """评估准确率。
+
+        Args:
+            data_name (str, optional):
+                数据名称（'id' 或 'csid'）。默认为 'id'。
+
+        Returns:
+            acc (float):
+                准确率。
+        """
         if data_name == 'id':
             if self.metrics['id_acc'] is not None:
                 return self.metrics['id_acc']
@@ -241,18 +261,29 @@ class Evaluator:
                 self.metrics['csid_acc'] = acc
                 return acc
         else:
-            raise ValueError(f'Unknown data name {data_name}')
+            raise ValueError(f'未知的数据名称 {data_name}')
 
     def eval_ood(self, fsood: bool = False, progress: bool = True):
+        """评估 OOD 检测指标。
+
+        Args:
+            fsood (bool, optional):
+                是否为 FSOOD 评估。默认为 False。
+            progress (bool, optional):
+                是否显示进度条。默认为 True。
+
+        Returns:
+            metrics_df (pd.DataFrame):
+                OOD 评估指标的 DataFrame。
+        """
         id_name = 'id' if not fsood else 'csid'
         task = 'ood' if not fsood else 'fsood'
         if self.metrics[task] is None:
             self.net.eval()
 
-            # id score
+            # ID 分数
             if self.scores['id']['test'] is None:
-                print(f'Performing inference on {self.id_name} test set...',
-                      flush=True)
+                print(f'对 {self.id_name} 测试集进行推断...', flush=True)
                 id_pred, id_conf, id_gt = self.postprocessor.inference(
                     self.net, self.dataloader_dict['id']['test'], progress)
                 self.scores['id']['test'] = [id_pred, id_conf, id_gt]
@@ -264,8 +295,7 @@ class Evaluator:
                 for i, dataset_name in enumerate(self.scores['csid'].keys()):
                     if self.scores['csid'][dataset_name] is None:
                         print(
-                            f'Performing inference on {self.id_name} '
-                            f'(cs) test set [{i+1}]: {dataset_name}...',
+                            f'对 {self.id_name} (cs) 测试集 [{i + 1}]: {dataset_name} 进行推断...',
                             flush=True)
                         temp_pred, temp_conf, temp_gt = \
                             self.postprocessor.inference(
@@ -288,11 +318,11 @@ class Evaluator:
                 id_conf = np.concatenate((id_conf, csid_conf))
                 id_gt = np.concatenate((id_gt, csid_gt))
 
-            # load nearood data and compute ood metrics
+            # 加载 nearood 数据并计算 OOD 指标
             near_metrics = self._eval_ood([id_pred, id_conf, id_gt],
                                           ood_split='near',
                                           progress=progress)
-            # load farood data and compute ood metrics
+            # 加载 farood 数据并计算 OOD 指标
             far_metrics = self._eval_ood([id_pred, id_conf, id_gt],
                                          ood_split='far',
                                          progress=progress)
@@ -307,17 +337,17 @@ class Evaluator:
             self.metrics[task] = pd.DataFrame(
                 np.concatenate([near_metrics, far_metrics], axis=0),
                 index=list(self.dataloader_dict['ood']['near'].keys()) +
-                ['nearood'] + list(self.dataloader_dict['ood']['far'].keys()) +
-                ['farood'],
+                      ['nearood'] + list(self.dataloader_dict['ood']['far'].keys()) +
+                      ['farood'],
                 columns=['FPR@95', 'AUROC', 'AUPR_IN', 'AUPR_OUT', 'ACC'],
             )
         else:
-            print('Evaluation has already been done!')
+            print('评估已经完成！')
 
         with pd.option_context(
                 'display.max_rows', None, 'display.max_columns', None,
                 'display.float_format',
-                '{:,.2f}'.format):  # more options can be specified also
+                '{:,.2f}'.format):  # 还可以指定更多选项
             print(self.metrics[task])
 
         return self.metrics[task]
@@ -326,14 +356,27 @@ class Evaluator:
                   id_list: List[np.ndarray],
                   ood_split: str = 'near',
                   progress: bool = True):
-        print(f'Processing {ood_split} ood...', flush=True)
+        """对 OOD 数据进行评估。
+
+        Args:
+            id_list (List[np.ndarray]):
+                包含 ID 分数、置信度和标签的列表。
+            ood_split (str, optional):
+                OOD 分割方式（'near' 或 'far'）。默认为 'near'。
+            progress (bool, optional):
+                是否显示进度条。默认为 True。
+
+        Returns:
+            metrics_all (np.ndarray):
+                包含所有评估指标的数组。
+        """
+        print(f'处理 {ood_split} ood 数据...', flush=True)
         [id_pred, id_conf, id_gt] = id_list
         metrics_list = []
         for dataset_name, ood_dl in self.dataloader_dict['ood'][
-                ood_split].items():
+            ood_split].items():
             if self.scores['ood'][ood_split][dataset_name] is None:
-                print(f'Performing inference on {dataset_name} dataset...',
-                      flush=True)
+                print(f'对 {dataset_name} 数据集进行推断...', flush=True)
                 ood_pred, ood_conf, ood_gt = self.postprocessor.inference(
                     self.net, ood_dl, progress)
                 self.scores['ood'][ood_split][dataset_name] = [
@@ -341,43 +384,50 @@ class Evaluator:
                 ]
             else:
                 print(
-                    'Inference has been performed on '
-                    f'{dataset_name} dataset...',
+                    '已对 '
+                    f'{dataset_name} 数据集进行推断...',
                     flush=True)
                 [ood_pred, ood_conf,
                  ood_gt] = self.scores['ood'][ood_split][dataset_name]
 
-            ood_gt = -1 * np.ones_like(ood_gt)  # hard set to -1 as ood
+            ood_gt = -1 * np.ones_like(ood_gt)  # 硬性设为 -1 作为 ood
             pred = np.concatenate([id_pred, ood_pred])
             conf = np.concatenate([id_conf, ood_conf])
             label = np.concatenate([id_gt, ood_gt])
 
-            print(f'Computing metrics on {dataset_name} dataset...')
+            print(f'计算 {dataset_name} 数据集的指标...')
             ood_metrics = compute_all_metrics(conf, label, pred)
             metrics_list.append(ood_metrics)
             self._print_metrics(ood_metrics)
 
-        print('Computing mean metrics...', flush=True)
+        print('计算平均指标...', flush=True)
         metrics_list = np.array(metrics_list)
         metrics_mean = np.mean(metrics_list, axis=0, keepdims=True)
         self._print_metrics(list(metrics_mean[0]))
         return np.concatenate([metrics_list, metrics_mean], axis=0) * 100
 
     def _print_metrics(self, metrics):
+        """打印评估指标。
+
+        Args:
+            metrics (List[float]):
+                包含 FPR@95、AUROC、AUPR_IN、AUPR_OUT 和 ACC 的指标列表。
+        """
         [fpr, auroc, aupr_in, aupr_out, _] = metrics
 
-        # print ood metric results
+        # 打印 ood 指标结果
         print('FPR@95: {:.2f}, AUROC: {:.2f}'.format(100 * fpr, 100 * auroc),
               end=' ',
               flush=True)
         print('AUPR_IN: {:.2f}, AUPR_OUT: {:.2f}'.format(
             100 * aupr_in, 100 * aupr_out),
-              flush=True)
+            flush=True)
         print(u'\u2500' * 70, flush=True)
         print('', flush=True)
 
     def hyperparam_search(self):
-        print('Starting automatic parameter search...')
+        """进行超参数搜索。"""
+        print('开始自动参数搜索...')
         max_auroc = 0
         hyperparam_names = []
         hyperparam_list = []
@@ -402,24 +452,36 @@ class Evaluator:
             ood_pred, ood_conf, ood_gt = self.postprocessor.inference(
                 self.net, self.dataloader_dict['ood']['val'])
 
-            ood_gt = -1 * np.ones_like(ood_gt)  # hard set to -1 as ood
+            ood_gt = -1 * np.ones_like(ood_gt)  # 硬性设为 -1 作为 ood
             pred = np.concatenate([id_pred, ood_pred])
             conf = np.concatenate([id_conf, ood_conf])
             label = np.concatenate([id_gt, ood_gt])
             ood_metrics = compute_all_metrics(conf, label, pred)
             auroc = ood_metrics[1]
 
-            print('Hyperparam: {}, auroc: {}'.format(hyperparam, auroc))
+            print('超参数: {}, auroc: {}'.format(hyperparam, auroc))
             if auroc > max_auroc:
                 final_index = i
                 max_auroc = auroc
 
         self.postprocessor.set_hyperparam(hyperparam_combination[final_index])
-        print('Final hyperparam: {}'.format(
+        print('最终超参数: {}'.format(
             self.postprocessor.get_hyperparam()))
         self.postprocessor.hyperparam_search_done = True
 
     def recursive_generator(self, list, n):
+        """生成超参数组合的递归函数。
+
+        Args:
+            list (List[List[Any]]):
+                包含所有超参数值的列表。
+            n (int):
+                超参数的数量。
+
+        Returns:
+            results (List[List[Any]]):
+                所有超参数组合的列表。
+        """
         if n == 1:
             results = []
             for x in list[0]:
