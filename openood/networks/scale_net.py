@@ -69,33 +69,18 @@ class ScaleNet(nn.Module):
 
 
 def scale(x, percentile=65):
-    """
-    对输入特征进行缩放处理。
+    input = x.clone()
+    assert x.dim() == 4
+    assert 0 <= percentile <= 100
+    b, c, h, w = x.shape
+    s1 = x.sum(dim=[1, 2, 3])                       # 计算特征总和
+    n = x.shape[1:].numel()                         # 计算特征的总元素数
+    k = n - int(np.round(n * percentile / 100.0))   # 计算阈值以上的元素数量k
+    t = x.view((b, c * h * w))
+    v, i = torch.topk(t, k, dim=1)                  # 获取前 k 大的元素值和索引
+    t.zero_().scatter_(dim=1, index=i, src=v)
+    s2 = x.sum(dim=[1, 2, 3])                       # 计算前 k 大的元素值的总和
 
-    参数:
-    x (Tensor): 输入特征，四维张量 (batch_size, channels, height, width)。
-    percentile (float): 用于缩放的百分位数。
+    scale = s1 / s2                                 # 计算缩放因子
 
-    返回:
-    Tensor: 经缩放处理后的特征。
-    """
-    input = x.clone()  # 克隆输入张量以保留原始数据
-    assert x.dim() == 4  # 确保输入是四维张量
-    assert 0 <= percentile <= 100  # 确保百分位数在合法范围内
-    b, c, h, w = x.shape  # 获取张量的尺寸
-
-    # 计算每个样本的总和
-    s1 = x.sum(dim=[1, 2, 3])
-    n = x.shape[1:].numel()  # 计算每个样本的总元素数
-    k = n - int(np.round(n * percentile / 100.0))  # 计算需要保留的元素数
-    t = x.view((b, c * h * w))  # 展平张量
-    v, i = torch.topk(t, k, dim=1)  # 获取前 k 个最大值及其索引
-    t.zero_().scatter_(dim=1, index=i, src=v)  # 将非前 k 个最大值置为零
-
-    # 计算缩放后的新总和
-    s2 = x.sum(dim=[1, 2, 3])
-
-    # 应用缩放
-    scale = s1 / s2  # 计算缩放因子
-
-    return input * torch.exp(scale[:, None, None, None])  # 乘以缩放因子并返回
+    return input * torch.exp(scale[:, None, None, None])  # 输入乘以缩放因子
