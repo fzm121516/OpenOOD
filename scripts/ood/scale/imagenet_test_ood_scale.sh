@@ -39,6 +39,8 @@ python scripts/eval_ood_imagenet.py \
     --postprocessor scale \
     --save-score --save-csv #--fsood
 
+python scripts/eval_ood_imagenet.py --tvs-pretrained --arch resnet50 --postprocessor scale --save-score --save-csv 
+
 # full-spectrum ood
 python scripts/eval_ood_imagenet.py \
     --tvs-pretrained \
